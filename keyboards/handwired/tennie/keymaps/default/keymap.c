@@ -15,9 +15,6 @@
  */
 #include QMK_KEYBOARD_H
 
-#define TAPPING_TOGGLE 2
-
-
 // Layer names
 #define base  0
 #define shrek 1
@@ -65,7 +62,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   [ogre] = LAYOUT(
   //         ┌────────┬────────┬────────┐
 
-               RGB_MOD, RGB_TOG, RGB_RMOD,
+               UG_NEXT, UG_TOGG, UG_PREV,
 
   //    ├────────┼────────┼────────┼────────┼
 

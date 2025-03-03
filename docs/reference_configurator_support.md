@@ -8,20 +8,22 @@ This page covers how to properly support keyboards in the [QMK Configurator](htt
 To understand how the Configurator understands keyboards, first one must understand layout macros. For this exercise, we're going to imagine a 17-key numpad PCB, which we're going to call `numpad`.
 
 ```
-┌───┬───┬───┬───┐
-│NLk│ / │ * │ - │
-├───┼───┼───┼───┤
-│7  │8  │9  │ + │
-├───┼───┼───┤   │
-│4  │5  │6  │   │
-├───┼───┼───┼───┤
-│1  │2  │3  │Ent│
-├───┴───┼───┤   │
-│0      │ . │   │
-└───────┴───┴───┘
+|---------------|
+|NLk| / | * | - |
+|---+---+---+---|
+|7  |8  |9  | + |
+|---+---+---|   |
+|4  |5  |6  |   |
+|---+---+---+---|
+|1  |2  |3  |Ent|
+|-------+---|   |
+|0      | . |   |
+|---------------|
 ```
 
-?> For more on layout macros, see [Understanding QMK: Matrix Scanning](understanding_qmk.md?id=matrix-scanning) and [Understanding QMK: Matrix to Physical Layout Map](understanding_qmk.md?id=matrix-to-physical-layout-map).
+::: tip
+For more on layout macros, see [Understanding QMK: Matrix Scanning](understanding_qmk#matrix-scanning) and [Understanding QMK: Matrix to Physical Layout Map](understanding_qmk#matrix-to-physical-layout-map).
+:::
 
 The Configurator's API reads the keyboard's `.h` file from `qmk_firmware/keyboards/<keyboard>/<keyboard>.h`. For our numpad, this file would be `qmk_firmware/keyboards/numpad/numpad.h`:
 
@@ -65,9 +67,13 @@ QMK uses `KC_NO` to designate places in the switch matrix where there is no swit
 }
 ```
 
-!> This usage differs from that of keymap macros, which almost always use `XXXXXXX` (seven capital X's) for `KC_NO` and `_______` (seven underscores) for `KC_TRNS`.
+::: warning
+This usage differs from that of keymap macros, which almost always use `XXXXXXX` (seven capital X's) for `KC_NO` and `_______` (seven underscores) for `KC_TRNS`.
+:::
 
-!> To prevent user confusion, using `KC_NO` is preferred.
+::: warning
+To prevent user confusion, using `KC_NO` is preferred.
+:::
 
 The layout macro tells the Configurator that our keyboard has 17 keys, arranged in five rows of four columns each. Our switch positions are named `k<row><column>`, counting from 0. The names themselves actually don't matter, as long as they match between the top section, which receives the keycodes from the keymap, and the bottom half which designates where each key is in the matrix.
 
@@ -75,7 +81,7 @@ To display our keyboard in a way that resembles the physical keyboard, we need t
 
 ## Building the JSON file
 
-To build the JSON file, the easiest way is to build the layout in [Keyboard Layout Editor](http://www.keyboard-layout-editor.com/) ("KLE"), from which we'll feed the Raw Data into a QMK tool that converts this data into a JSON the Configurator will read and use. Since KLE opens by default with a numpad layout, we're just going to remove the Getting Started instructions, and use what's left.
+To build the JSON file, the easiest way is to build the layout in [Keyboard Layout Editor](https://www.keyboard-layout-editor.com/) ("KLE"), from which we'll feed the Raw Data into a QMK tool that converts this data into a JSON the Configurator will read and use. Since KLE opens by default with a numpad layout, we're just going to remove the Getting Started instructions, and use what's left.
 
 Once the layout is as desired, move to the Raw Data tab in KLE, and copy the contents:
 
@@ -99,8 +105,6 @@ Use the `keyboard_name` object to set the name of the keyboard. For instruction 
     "tags": {
         "form_factor": "numpad"
     },
-    "width": 4,
-    "height": 5,
     "layouts": {
         "LAYOUT": {
             "layout": [
@@ -130,45 +134,49 @@ Use the `keyboard_name` object to set the name of the keyboard. For instruction 
 The `layouts` object contains the data that represents the physical layout of the keyboard. It has an object `LAYOUT`, which needs to match the name of our layout macro from `numpad.h`. The `LAYOUT` object itself has an object named `layout`, which contains one JSON object for each physical key on our keyboard, formatted as follows:
 
 ```
-  ┌ The name of the key. Not displayed in the Configurator.
-  │                   ┌ The key's X-axis location, in key units from the
-  │                   │ keyboard's left edge.
-  │                   │      ┌ The key's Y-axis location, in key units from
-  │                   │      │ the keyboard's top (rear-facing) edge.
+  The name of the key. Not displayed in the Configurator.
+  |
+  |                   The key's X-axis location, in key units from the
+  |                   | keyboard's left edge.
+  |                   |
+  |                   |      The key's Y-axis location, in key units from
+  |                   |      | the keyboard's top (rear-facing) edge.
   ↓                   ↓      ↓
 {"label":"Num Lock", "x":0, "y":0},
 ```
 
 Some objects will also have `"w"` and `"h"` keys, which represent a key's width and height, respectively.
 
-?> For more on the `info.json` files, see [QMK Keyboard Guidelines: Keyboard Metadata](hardware_keyboard_guidelines.md?id=keyboard-metadata)
+::: tip
+For more on the `info.json` files, see [`info.json` Format](reference_info_json).
+:::
 
 
 ## How the Configurator Programs Keys
 
 The Configurator's API uses the layout macro and the JSON file we've given it to create a visual representation of the keyboard that has each visual object tied to a specific key, in sequence:
 
-key in layout macro | JSON object used
-:---: | :----
-k00   | {"label":"Num Lock", "x":0, "y":0}
-k01   | {"label":"/", "x":1, "y":0}
-k02   | {"label":"*", "x":2, "y":0}
-k03   | {"label":"-", "x":3, "y":0}
-k10   | {"label":"7", "x":0, "y":1}
-k11   | {"label":"8", "x":1, "y":1}
-k12   | {"label":"9", "x":2, "y":1}
-k13   | {"label":"+", "x":3, "y":1, "h":2}
-k20   | {"label":"4", "x":0, "y":2}
-k21   | {"label":"5", "x":1, "y":2}
-k22   | {"label":"6", "x":2, "y":2}
-k30   | {"label":"1", "x":0, "y":3}
-k31   | {"label":"2", "x":1, "y":3}
-k32   | {"label":"3", "x":2, "y":3}
-k33   | {"label":"Enter", "x":3, "y":3, "h":2}
-k40   | {"label":"0", "x":0, "y":4, "w":2}
-k42   | {"label":".", "x":2, "y":4}
+| Key in layout macro | JSON object used                         |
+| ------------------- | ---------------------------------------- |
+| k00                 | `{"label":"Num Lock", "x":0, "y":0}`     |
+| k01                 | `{"label":"/", "x":1, "y":0}`            |
+| k02                 | `{"label":"*", "x":2, "y":0}`            |
+| k03                 | `{"label":"-", "x":3, "y":0}`            |
+| k10                 | `{"label":"7", "x":0, "y":1}`            |
+| k11                 | `{"label":"8", "x":1, "y":1}`            |
+| k12                 | `{"label":"9", "x":2, "y":1}`            |
+| k13                 | `{"label":"+", "x":3, "y":1, "h":2}`     |
+| k20                 | `{"label":"4", "x":0, "y":2}`            |
+| k21                 | `{"label":"5", "x":1, "y":2}`            |
+| k22                 | `{"label":"6", "x":2, "y":2}`            |
+| k30                 | `{"label":"1", "x":0, "y":3}`            |
+| k31                 | `{"label":"2", "x":1, "y":3}`            |
+| k32                 | `{"label":"3", "x":2, "y":3}`            |
+| k33                 | `{"label":"Enter", "x":3, "y":3, "h":2}` |
+| k40                 | `{"label":"0", "x":0, "y":4, "w":2}`     |
+| k42                 | `{"label":".", "x":2, "y":4}`            |
 
-When a user selects the top-left key in the Configurator, and assigns Num Lock to it, the Configurator builds a keymap file with `KC_NLCK` as the first key, and so on as the keymap is built. The `label` keys are not used; they are only for the user's reference in identifying specific keys when debugging the `info.json` file.
+When a user selects the top-left key in the Configurator, and assigns Num Lock to it, the Configurator builds a keymap file with `KC_NUM` as the first key, and so on as the keymap is built. The `label` keys are not used; they are only for the user's reference in identifying specific keys when debugging the `info.json` file.
 
 
 ## Issues and Hazards

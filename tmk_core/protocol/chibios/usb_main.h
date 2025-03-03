@@ -1,28 +1,20 @@
-/*
- * (c) 2015 flabberast <s3+flabbergast@sdfeu.org>
- *
- * Based on the following work:
- *  - Guillaume Duc's raw hid example (MIT License)
- *    https://github.com/guiduc/usb-hid-chibios-example
- *  - PJRC Teensy examples (MIT License)
- *    https://www.pjrc.com/teensy/usb_keyboard.html
- *  - hasu's TMK keyboard code (GPL v2 and some code Modified BSD)
- *    https://github.com/tmk/tmk_keyboard/
- *  - ChibiOS demo code (Apache 2.0 License)
- *    http://www.chibios.org
- *
- * Since some GPL'd code is used, this work is licensed under
- * GPL v2 or later.
- */
+// Copyright 2023 Stefan Kerkmann (@KarlK90)
+// Copyright 2020 Ryan (@fauxpark)
+// Copyright 2020 Joel Challis (@zvecr)
+// Copyright 2018 James Laird-Wah
+// Copyright 2016 Fredizzimo
+// Copyright 2016 Giovanni Di Sirio
+// SPDX-License-Identifier: GPL-3.0-or-later OR Apache-2.0
 
-#ifndef _USB_MAIN_H_
-#define _USB_MAIN_H_
+#pragma once
 
-// TESTING
-// extern uint8_t blinkLed;
+#include <ch.h>
+#include <hal.h>
 
-#include "ch.h"
-#include "hal.h"
+#include "usb_device_state.h"
+#include "usb_descriptor.h"
+#include "usb_driver.h"
+#include "usb_endpoints.h"
 
 /* -------------------------
  * General USB driver header
@@ -30,61 +22,28 @@
  */
 
 /* The USB driver to use */
-#define USB_DRIVER USBD1
+#ifndef USB_DRIVER
+#    define USB_DRIVER USBD1
+#endif // USB_DRIVER
 
 /* Initialize the USB driver and bus */
 void init_usb_driver(USBDriver *usbp);
 
+/* Restart the USB driver and bus */
+void restart_usb_driver(USBDriver *usbp);
+
+bool send_report(usb_endpoint_in_lut_t endpoint, void *report, size_t size);
+
 /* ---------------
- * Keyboard header
+ * USB Event queue
  * ---------------
  */
 
-/* extern report_keyboard_t keyboard_report_sent; */
+/* Initialisation of the FIFO */
+void usb_event_queue_init(void);
 
-/* keyboard IN request callback handler */
-void kbd_in_cb(USBDriver *usbp, usbep_t ep);
-
-/* start-of-frame handler */
-void kbd_sof_cb(USBDriver *usbp);
-
-#ifdef NKRO_ENABLE
-/* nkro IN callback hander */
-void nkro_in_cb(USBDriver *usbp, usbep_t ep);
-#endif /* NKRO_ENABLE */
-
-/* ------------
- * Mouse header
- * ------------
- */
-
-#ifdef MOUSE_ENABLE
-
-/* mouse IN request callback handler */
-void mouse_in_cb(USBDriver *usbp, usbep_t ep);
-#endif /* MOUSE_ENABLE */
-
-/* ---------------
- * Shared EP header
- * ---------------
- */
-
-/* shared IN request callback handler */
-void shared_in_cb(USBDriver *usbp, usbep_t ep);
-
-/* ---------------
- * Extrakey header
- * ---------------
- */
-
-#ifdef EXTRAKEY_ENABLE
-
-/* extra report structure */
-typedef struct {
-    uint8_t  report_id;
-    uint16_t usage;
-} __attribute__((packed)) report_extra_t;
-#endif /* EXTRAKEY_ENABLE */
+/* Task to dequeue and execute any handlers for the USB events on the main thread */
+void usb_event_queue_task(void);
 
 /* --------------
  * Console header
@@ -96,11 +55,15 @@ typedef struct {
 /* Putchar over the USB console */
 int8_t sendchar(uint8_t c);
 
-/* Flush output (send everything immediately) */
-void console_flush_output(void);
-
 #endif /* CONSOLE_ENABLE */
 
-void sendchar_pf(void *p, char c);
+/* --------------
+ * Virtser header
+ * --------------
+ */
 
-#endif /* _USB_MAIN_H_ */
+#if defined(VIRTSER_ENABLE)
+
+bool virtser_usb_request_cb(USBDriver *usbp);
+
+#endif

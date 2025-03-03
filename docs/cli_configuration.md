@@ -4,7 +4,7 @@ This document explains how `qmk config` works.
 
 # Introduction
 
-Configuration for QMK CLI is a key/value system. Each key consists of a subcommand and an argument name separated by a period. This allows for a straightforward and direct translation between config keys and the arguments they set.
+Configuration for the QMK CLI is a key/value system. Each key consists of a subcommand and an argument name separated by a period. This allows for a straightforward and direct translation between config keys and the arguments they set.
 
 ## Simple Example
 
@@ -43,7 +43,9 @@ user.keymap: None -> default
 
 The `qmk config` command is used to interact with the underlying configuration. When run with no argument it shows the current configuration. When arguments are supplied they are assumed to be configuration tokens, which are strings containing no spaces with the following form:
 
-    <subcommand|general|default>[.<key>][=<value>]
+```
+<subcommand|general|default>[.<key>][=<value>]
+```
 
 ## Setting Configuration Values
 
@@ -63,19 +65,27 @@ You can read configuration values for the entire configuration, a single key, or
 
 ### Entire Configuration Example
 
-    qmk config
+```
+qmk config
+```
 
 ### Whole Section Example
 
-    qmk config compile
+```
+qmk config compile
+```
 
 ### Single Key Example
 
-    qmk config compile.keyboard
+```
+qmk config compile.keyboard
+```
 
 ### Multiple Keys Example
 
-    qmk config user compile.keyboard compile.keymap
+```
+qmk config user compile.keyboard compile.keymap
+```
 
 ## Deleting Configuration Values
 
@@ -108,7 +118,7 @@ compile.keymap: skully -> None
 |-----|---------------|-------------|
 | user.keyboard | None | The keyboard path (Example: `clueboard/66/rev4`) |
 | user.keymap | None | The keymap name (Example: `default`) |
-| user.name | None | The user's github username. |
+| user.name | None | The user's GitHub username. |
 
 # All Configuration Options
 

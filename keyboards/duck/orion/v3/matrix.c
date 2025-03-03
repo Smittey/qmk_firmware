@@ -14,13 +14,14 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <util/delay.h>
-#include <avr/io.h>
-#include <stdio.h>
 #include "matrix.h"
-#include "util.h"
-#include "print.h"
 #include "debug.h"
+#include "bitwise.h"
+#include "wait.h"
+
+#ifndef DEBOUNCE
+#    define DEBOUNCE 5
+#endif
 
 static uint8_t debouncing = DEBOUNCE;
 
@@ -52,20 +53,7 @@ __attribute__ ((weak))
 void matrix_scan_user(void) {
 }
 
-void backlight_init_ports(void)
-{
-  DDRD  |=  0b11010000;
-  PORTD &= ~0b01010000;
-  PORTD |=  0b10000000;
-  DDRB  |=  0b00011111;
-  PORTB &= ~0b00001110;
-  PORTB |=  0b00010001;
-  DDRE  |=  0b01000000;
-  PORTE &= ~0b01000000;
-}
-
 void matrix_init(void) {
-  backlight_init_ports();
   unselect_cols();
   init_rows();
 
@@ -74,7 +62,7 @@ void matrix_init(void) {
     matrix_debouncing[i] = 0;
   }
 
-  matrix_init_quantum();
+  matrix_init_kb();
 }
 
 uint8_t matrix_scan(void) {
@@ -108,7 +96,7 @@ uint8_t matrix_scan(void) {
     }
   }
 
-  matrix_scan_quantum();
+  matrix_scan_kb();
   return 1;
 }
 

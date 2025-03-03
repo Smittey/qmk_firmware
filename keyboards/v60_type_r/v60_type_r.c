@@ -15,16 +15,8 @@
  */
 #include "v60_type_r.h"
 
-#include "quantum.h"
-
 // if we've got an RGB underglow!
-#ifdef V60_POLESTAR
-
-#include "rgblight.h"
-
-#include <avr/pgmspace.h>
-
-#include "action_layer.h"
+#ifdef RGBLIGHT_ENABLE
 
 #define SOFTPWM_LED_TIMER_TOP F_CPU/(256*64)
 
@@ -106,52 +98,42 @@ bool process_record_kb(uint16_t keycode, keyrecord_t *record) {
 
 
 void rgb_timer_init(void) {
-    /* Timer1 setup */
+    /* Timer3 setup */
     /* CTC mode */
-    TCCR1B |= (1<<WGM12);
-    /* Clock selelct: clk/8 */
-    TCCR1B |= (1<<CS10);
+    TCCR3B |= _BV(WGM32);
+    /* Clock select: clk/8 */
+    TCCR3B |= _BV(CS30);
     /* Set TOP value */
     uint8_t sreg = SREG;
     cli();
-    OCR1AH = (SOFTPWM_LED_TIMER_TOP >> 8) & 0xff;
-    OCR1AL = SOFTPWM_LED_TIMER_TOP & 0xff;
+    OCR3AH = (SOFTPWM_LED_TIMER_TOP >> 8) & 0xFF;
+    OCR3AL = SOFTPWM_LED_TIMER_TOP & 0xFF;
     SREG = sreg;
 
-    // Enable the compare match interrupt on timer 1
-    TIMSK1 |= (1<<OCIE1A);
+    // Enable the compare match interrupt on timer 3
+    TIMSK3 |= _BV(OCIE3A);
 }
 
 void rgb_init(void) {
-    DDRF  |=  (1<<PF6 | 1<<PF5 | 1<<PF4);
-    PORTF |=  (1<<PF6 | 1<<PF5 | 1<<PF4);
+    gpio_set_pin_output(F4);
+    gpio_set_pin_output(F5);
+    gpio_set_pin_output(F6);
+    gpio_write_pin_high(F4);
+    gpio_write_pin_high(F5);
+    gpio_write_pin_high(F6);
 
     rgb_timer_init();
 }
 
-void set_rgb_pin_on(uint8_t pin) {
-	PORTF &= ~(1<<pin);
+void set_rgb_pin_on(pin_t pin) {
+	gpio_write_pin_low(pin);
 }
 
-void set_rgb_pin_off(uint8_t pin) {
-	PORTF |= (1<<pin);
+void set_rgb_pin_off(pin_t pin) {
+	gpio_write_pin_high(pin);
 }
 
-void rgblight_set(void) {
-	  // xprintf("Setting RGB underglow\n");
-    if (!rgblight_config.enable) {
-          led[0].r = 0;
-          led[0].g = 0;
-          led[0].b = 0;
-          set_rgb_pin_off(RGB_RED_PIN);
-          set_rgb_pin_off(RGB_GREEN_PIN);
-          set_rgb_pin_off(RGB_BLUE_PIN);
-    }
-
-   //  //xprintf("Red: %u, Green: %u, Blue: %u\n", led[0].r, led[0].g, led[0].b);
-}
-
-ISR(TIMER1_COMPA_vect)
+ISR(TIMER3_COMPA_vect)
 {
     static uint8_t pwm = 0;
     pwm++;
@@ -191,4 +173,4 @@ ISR(TIMER1_COMPA_vect)
     	softpwm_buff[2] = led[0].b;
   	}
 }
-#endif // V60_POLESTAR
+#endif // RGBLIGHT_ENABLE

@@ -17,15 +17,22 @@
 #include "color.h"
 #include "led_tables.h"
 #include "progmem.h"
+#include "util.h"
 
-RGB hsv_to_rgb(HSV hsv) {
-    RGB      rgb;
+rgb_t hsv_to_rgb_impl(hsv_t hsv, bool use_cie) {
+    rgb_t    rgb;
     uint8_t  region, remainder, p, q, t;
     uint16_t h, s, v;
 
     if (hsv.s == 0) {
 #ifdef USE_CIE1931_CURVE
-        rgb.r = rgb.g = rgb.b = pgm_read_byte(&CIE1931_CURVE[hsv.v]);
+        if (use_cie) {
+            rgb.r = rgb.g = rgb.b = pgm_read_byte(&CIE1931_CURVE[hsv.v]);
+        } else {
+            rgb.r = hsv.v;
+            rgb.g = hsv.v;
+            rgb.b = hsv.v;
+        }
 #else
         rgb.r = hsv.v;
         rgb.g = hsv.v;
@@ -37,7 +44,11 @@ RGB hsv_to_rgb(HSV hsv) {
     h = hsv.h;
     s = hsv.s;
 #ifdef USE_CIE1931_CURVE
-    v = pgm_read_byte(&CIE1931_CURVE[hsv.v]);
+    if (use_cie) {
+        v = pgm_read_byte(&CIE1931_CURVE[hsv.v]);
+    } else {
+        v = hsv.v;
+    }
 #else
     v = hsv.v;
 #endif
@@ -84,4 +95,16 @@ RGB hsv_to_rgb(HSV hsv) {
     }
 
     return rgb;
+}
+
+rgb_t hsv_to_rgb(hsv_t hsv) {
+#ifdef USE_CIE1931_CURVE
+    return hsv_to_rgb_impl(hsv, true);
+#else
+    return hsv_to_rgb_impl(hsv, false);
+#endif
+}
+
+rgb_t hsv_to_rgb_nocie(hsv_t hsv) {
+    return hsv_to_rgb_impl(hsv, false);
 }

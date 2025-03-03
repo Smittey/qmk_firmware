@@ -1,6 +1,8 @@
-#include "jotpad16.h"
+#include "quantum.h"
 
-void matrix_init_kb(void) {
-
-	matrix_init_user();
+void keyboard_pre_init_kb(void) {
+    gpio_set_pin_output(JOTPAD16_LED1);
+    gpio_set_pin_output(JOTPAD16_LED2);
+    
+    keyboard_pre_init_user();
 }

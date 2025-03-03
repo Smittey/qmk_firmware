@@ -1,111 +1,179 @@
-/*
- * Copyright 2018 Jack Humbert <jack.humb@gmail.com>
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- */
+// Copyright 2022-2023 Nick Brassel (@tzarc)
+// SPDX-License-Identifier: GPL-2.0-or-later
 
-#include "encoder.h"
-#ifdef SPLIT_KEYBOARD
-#    include "split_util.h"
-#endif
-
-// for memcpy
 #include <string.h>
+#include "action.h"
+#include "encoder.h"
+#include "wait.h"
 
-#ifndef ENCODER_RESOLUTION
-#    define ENCODER_RESOLUTION 4
+#ifndef ENCODER_MAP_KEY_DELAY
+#    define ENCODER_MAP_KEY_DELAY TAP_CODE_DELAY
 #endif
 
-#if !defined(ENCODERS_PAD_A) || !defined(ENCODERS_PAD_B)
-#    error "No encoder pads defined by ENCODERS_PAD_A and ENCODERS_PAD_B"
-#endif
+__attribute__((weak)) bool should_process_encoder(void) {
+    return is_keyboard_master();
+}
 
-#define NUMBER_OF_ENCODERS (sizeof(encoders_pad_a) / sizeof(pin_t))
-static pin_t encoders_pad_a[] = ENCODERS_PAD_A;
-static pin_t encoders_pad_b[] = ENCODERS_PAD_B;
-
-static int8_t encoder_LUT[] = {0, -1, 1, 0, 1, 0, 0, -1, -1, 0, 0, 1, 0, 1, -1, 0};
-
-static uint8_t encoder_state[NUMBER_OF_ENCODERS] = {0};
-
-#ifdef SPLIT_KEYBOARD
-// right half encoders come over as second set of encoders
-static int8_t encoder_value[NUMBER_OF_ENCODERS * 2] = {0};
-// row offsets for each hand
-static uint8_t thisHand, thatHand;
-#else
-static int8_t encoder_value[NUMBER_OF_ENCODERS] = {0};
-#endif
-
-__attribute__((weak)) void encoder_update_user(int8_t index, bool clockwise) {}
-
-__attribute__((weak)) void encoder_update_kb(int8_t index, bool clockwise) { encoder_update_user(index, clockwise); }
+static encoder_events_t encoder_events;
+static bool             signal_queue_drain = false;
 
 void encoder_init(void) {
-#if defined(SPLIT_KEYBOARD) && defined(ENCODERS_PAD_A_RIGHT) && defined(ENCODERS_PAD_B_RIGHT)
-    if (!isLeftHand) {
-        const pin_t encoders_pad_a_right[] = ENCODERS_PAD_A_RIGHT;
-        const pin_t encoders_pad_b_right[] = ENCODERS_PAD_B_RIGHT;
-        for (uint8_t i = 0; i < NUMBER_OF_ENCODERS; i++) {
-            encoders_pad_a[i] = encoders_pad_a_right[i];
-            encoders_pad_b[i] = encoders_pad_b_right[i];
+    memset(&encoder_events, 0, sizeof(encoder_events));
+    encoder_driver_init();
+}
+
+static void encoder_queue_drain(void) {
+    encoder_events.tail     = encoder_events.head;
+    encoder_events.dequeued = encoder_events.enqueued;
+}
+
+static bool encoder_handle_queue(void) {
+    bool    changed = false;
+    uint8_t index;
+    bool    clockwise;
+    while (encoder_dequeue_event(&index, &clockwise)) {
+#ifdef ENCODER_MAP_ENABLE
+
+        // The delays below cater for Windows and its wonderful requirements.
+        action_exec(clockwise ? MAKE_ENCODER_CW_EVENT(index, true) : MAKE_ENCODER_CCW_EVENT(index, true));
+#    if ENCODER_MAP_KEY_DELAY > 0
+        wait_ms(ENCODER_MAP_KEY_DELAY);
+#    endif // ENCODER_MAP_KEY_DELAY > 0
+
+        action_exec(clockwise ? MAKE_ENCODER_CW_EVENT(index, false) : MAKE_ENCODER_CCW_EVENT(index, false));
+#    if ENCODER_MAP_KEY_DELAY > 0
+        wait_ms(ENCODER_MAP_KEY_DELAY);
+#    endif // ENCODER_MAP_KEY_DELAY > 0
+
+#else // ENCODER_MAP_ENABLE
+
+        encoder_update_kb(index, clockwise);
+
+#endif // ENCODER_MAP_ENABLE
+
+        changed = true;
+    }
+    return changed;
+}
+
+bool encoder_task(void) {
+    bool changed = false;
+
+#ifdef SPLIT_KEYBOARD
+    // Attempt to process existing encoder events in case split handling has already enqueued events
+    if (should_process_encoder()) {
+        changed |= encoder_handle_queue();
+    }
+#endif // SPLIT_KEYBOARD
+
+    if (signal_queue_drain) {
+        signal_queue_drain = false;
+        encoder_queue_drain();
+    }
+
+    // Let the encoder driver produce events
+    encoder_driver_task();
+
+    // Process any events that were enqueued
+    if (should_process_encoder()) {
+        changed |= encoder_handle_queue();
+    }
+
+    return changed;
+}
+
+bool encoder_queue_full_advanced(encoder_events_t *events) {
+    return events->tail == (events->head + 1) % MAX_QUEUED_ENCODER_EVENTS;
+}
+
+bool encoder_queue_full(void) {
+    return encoder_queue_full_advanced(&encoder_events);
+}
+
+bool encoder_queue_empty_advanced(encoder_events_t *events) {
+    return events->head == events->tail;
+}
+
+bool encoder_queue_empty(void) {
+    return encoder_queue_empty_advanced(&encoder_events);
+}
+
+bool encoder_queue_event_advanced(encoder_events_t *events, uint8_t index, bool clockwise) {
+    // Drop out if we're full
+    if (encoder_queue_full_advanced(events)) {
+        return false;
+    }
+
+    // Append the event
+    encoder_event_t new_event   = {.index = index, .clockwise = clockwise ? 1 : 0};
+    events->queue[events->head] = new_event;
+
+    // Increment the head index
+    events->head = (events->head + 1) % MAX_QUEUED_ENCODER_EVENTS;
+    events->enqueued++;
+
+    return true;
+}
+
+bool encoder_dequeue_event_advanced(encoder_events_t *events, uint8_t *index, bool *clockwise) {
+    if (encoder_queue_empty_advanced(events)) {
+        return false;
+    }
+
+    // Retrieve the event
+    encoder_event_t event = events->queue[events->tail];
+    *index                = event.index;
+    *clockwise            = event.clockwise;
+
+    // Increment the tail index
+    events->tail = (events->tail + 1) % MAX_QUEUED_ENCODER_EVENTS;
+    events->dequeued++;
+
+    return true;
+}
+
+bool encoder_queue_event(uint8_t index, bool clockwise) {
+    return encoder_queue_event_advanced(&encoder_events, index, clockwise);
+}
+
+bool encoder_dequeue_event(uint8_t *index, bool *clockwise) {
+    return encoder_dequeue_event_advanced(&encoder_events, index, clockwise);
+}
+
+void encoder_retrieve_events(encoder_events_t *events) {
+    memcpy(events, &encoder_events, sizeof(encoder_events));
+}
+
+void encoder_signal_queue_drain(void) {
+    signal_queue_drain = true;
+}
+
+__attribute__((weak)) bool encoder_update_user(uint8_t index, bool clockwise) {
+    return true;
+}
+
+__attribute__((weak)) bool encoder_update_kb(uint8_t index, bool clockwise) {
+    bool res = encoder_update_user(index, clockwise);
+#if !defined(ENCODER_TESTS)
+    if (res) {
+        if (clockwise) {
+#    if defined(EXTRAKEY_ENABLE)
+            tap_code_delay(KC_VOLU, 10);
+#    elif defined(MOUSEKEY_ENABLE)
+            tap_code_delay(QK_MOUSE_WHEEL_UP, 10);
+#    else
+            tap_code_delay(KC_PGDN, 10);
+#    endif
+        } else {
+#    if defined(EXTRAKEY_ENABLE)
+            tap_code_delay(KC_VOLD, 10);
+#    elif defined(MOUSEKEY_ENABLE)
+            tap_code_delay(QK_MOUSE_WHEEL_DOWN, 10);
+#    else
+            tap_code_delay(KC_PGUP, 10);
+#    endif
         }
     }
-#endif
-
-    for (int i = 0; i < NUMBER_OF_ENCODERS; i++) {
-        setPinInputHigh(encoders_pad_a[i]);
-        setPinInputHigh(encoders_pad_b[i]);
-
-        encoder_state[i] = (readPin(encoders_pad_a[i]) << 0) | (readPin(encoders_pad_b[i]) << 1);
-    }
-
-#ifdef SPLIT_KEYBOARD
-    thisHand = isLeftHand ? 0 : NUMBER_OF_ENCODERS;
-    thatHand = NUMBER_OF_ENCODERS - thisHand;
-#endif
+#endif // ENCODER_TESTS
+    return res;
 }
-
-static void encoder_update(int8_t index, uint8_t state) {
-    encoder_value[index] += encoder_LUT[state & 0xF];
-    if (encoder_value[index] >= ENCODER_RESOLUTION) {
-        encoder_update_kb(index, false);
-    }
-    if (encoder_value[index] <= -ENCODER_RESOLUTION) { // direction is arbitrary here, but this clockwise
-        encoder_update_kb(index, true);
-    }
-    encoder_value[index] %= ENCODER_RESOLUTION;
-}
-
-void encoder_read(void) {
-    for (int i = 0; i < NUMBER_OF_ENCODERS; i++) {
-        encoder_state[i] <<= 2;
-        encoder_state[i] |= (readPin(encoders_pad_a[i]) << 0) | (readPin(encoders_pad_b[i]) << 1);
-#if SPLIT_KEYBOARD
-        encoder_update(i + thisHand, encoder_state[i]);
-#else
-        encoder_update(i, encoder_state[i]);
-#endif
-    }
-}
-
-#ifdef SPLIT_KEYBOARD
-void encoder_state_raw(uint8_t* slave_state) { memcpy(slave_state, encoder_state, sizeof(encoder_state)); }
-
-void encoder_update_raw(uint8_t* slave_state) {
-    for (int i = 0; i < NUMBER_OF_ENCODERS; i++) {
-        encoder_update(i + thatHand, slave_state[i]);
-    }
-}
-#endif
